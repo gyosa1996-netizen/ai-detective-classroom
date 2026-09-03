@@ -232,8 +232,17 @@ async function studentTick(){
 }
 
 function renderTeacherParticipants(list){
-  const humans=list.filter(p=>!p.revealed_as_ai);
-  $("#participantCount").textContent=humans.length;
+  // 로비에서는 학생들이 교사 화면을 보더라도 닉네임/캐릭터를 미리 알 수 없게 한다.
+  // 게임 시작 시 AI가 추가되므로, 로비 명단을 보여주면 새로 등장한 캐릭터가 AI라는 힌트가 된다.
+  if(state.room?.status === "lobby"){
+    $("#participantCount").textContent=list.length;
+    $("#teacherParticipants").innerHTML = list.length
+      ? `<div class="participant-item"><strong>학생 ${list.length}명 입장 완료</strong></div><div class="participant-item">🔒 닉네임은 게임 시작 후 공개</div>`
+      : `<div class="participant-item">학생 입장을 기다리는 중</div>`;
+    return;
+  }
+
+  $("#participantCount").textContent=list.length;
   $("#teacherParticipants").innerHTML=list.map(p=>`<div class="participant-item">${escapeHtml(p.emoji)} <strong>${escapeHtml(p.nickname)}</strong></div>`).join("");
 }
 function hideAllTeacherPanels(){
@@ -270,7 +279,8 @@ function renderStudentState(room,participants){
   hideAllStudentPanels();
   if(room.status==="lobby"){
     $("#studentLobbyPanel").classList.remove("hidden");
-    $("#studentParticipantsLobby").innerHTML=participants.map(p=>`<span class="chip">${escapeHtml(p.emoji)} ${escapeHtml(p.nickname)}</span>`).join("");
+    // 로비에서는 캐릭터/닉네임을 숨긴다. 게임 시작 뒤 사람과 AI가 동시에 처음 보이게 한다.
+    $("#studentParticipantsLobby").innerHTML=`<span class="chip">현재 ${participants.length}명 입장</span><span class="chip">🔒 참가자 닉네임 비공개</span>`;
   }else if(room.status==="chat"){
     $("#studentChatPanel").classList.remove("hidden");
   }else if(room.status==="vote"){
