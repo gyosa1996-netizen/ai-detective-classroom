@@ -119,6 +119,9 @@ function promptFor(difficulty, aiName, participants, history, plan, recentAiText
 [최근 대화를 읽는 방법]
 - 가장 최근 1~3개 메시지를 가장 중요하게 본다.
 - 필요하면 그보다 조금 전 메시지에 반응해도 된다.
+- 절대로 먼저 새 화제를 시작하지 않는다.
+- 최근 사람 메시지에 실제로 나온 내용 중 하나에만 반응한다.
+- 최근 사람 대화에 연결할 내용이 없으면 억지로 말하지 않는다.
 - 대화 전체를 요약하거나 한꺼번에 답하려 하지 않는다.
 - 바로 앞 질문에 반드시 답할 필요는 없다.
 - 다른 참가자 말에 끼어들거나 짧게 되물을 수 있다.
@@ -290,30 +293,72 @@ export default async (req) => {
     const chronological = (msgs||[]).reverse();
     const last = chronological.at(-1);
     const aiMessages = chronological.filter(m=>m.participant_id===ai.id);
+    const humanMessages = chronological.filter(m=>m.participant_id!==ai.id);
     const lastAi = aiMessages.at(-1);
-    const lastHuman = [...chronological].reverse().find(m=>m.participant_id!==ai.id);
+    const lastHuman = humanMessages.at(-1);
+
+    // ------------------------------------------------------------
+    // v6: AI가 먼저 말해서 정체가 드러나는 문제를 서버에서 강제로 차단
+    // ------------------------------------------------------------
+    // 최소 사람 메시지 3개가 쌓여야 함.
+    if(humanMessages.length < 3){
+      return json({skipped:"need-3-human-messages"});
+    }
+
+    // 서로 다른 실제 참가자 2명 이상이 먼저 대화해야 함.
+    const distinctHumanSpeakers = new Set(
+      humanMessages.map(m=>m.participant_id)
+    );
+    if(distinctHumanSpeakers.size < 2){
+      return json({skipped:"need-2-human-speakers"});
+    }
+
+    if(!lastHuman){
+      return json({skipped:"no-human-message"});
+    }
+
+    const sinceAi = lastAi
+      ? (Date.now()-new Date(lastAi.created_at).getTime())/1000
+      : 999;
+
+    const sinceHuman =
+      (Date.now()-new Date(lastHuman.created_at).getTime())/1000;
+
+    // 사람 메시지가 올라오자마자 즉답하지 않도록 최소 4초 대기.
+    // 자동 호출은 주기적으로 들어오므로 실제 응답 시점은 자연스럽게 흔들린다.
+    if(sinceHuman < 4){
+      return json({skipped:"human-message-too-recent"});
+    }
+
+    // 최근 18초 동안 사람 말이 없으면 AI도 침묵.
+    // AI가 혼자 새 화제를 꺼내는 상황을 방지한다.
+    if(sinceHuman > 18){
+      return json({skipped:"conversation-quiet"});
+    }
+
+    // 직전 메시지가 AI라면 연속 발언을 막는다.
+    if(last?.participant_id===ai.id && sinceAi < 24){
+      return json({skipped:"double"});
+    }
 
     if(!force){
-      if(!lastHuman) return json({skipped:"no-human-message"});
-
-      const sinceAi = lastAi ? (Date.now()-new Date(lastAi.created_at).getTime())/1000 : 999;
-      const sinceHuman = (Date.now()-new Date(lastHuman.created_at).getTime())/1000;
-
       const baseGap =
-        room.difficulty==="hard" ? 8 :
-        room.difficulty==="easy" ? 14 : 10;
+        room.difficulty==="hard" ? 9 :
+        room.difficulty==="easy" ? 15 : 11;
 
-      const randomGap = baseGap + Math.floor(Math.random()*7);
+      const randomGap = baseGap + Math.floor(Math.random()*8);
 
-      if(sinceAi < randomGap) return json({skipped:"cooldown"});
-      if(sinceHuman > 35 && sinceAi < 24) return json({skipped:"quiet"});
+      if(sinceAi < randomGap){
+        return json({skipped:"cooldown"});
+      }
 
       const chance =
-        room.difficulty==="hard" ? .62 :
-        room.difficulty==="easy" ? .42 : .54;
+        room.difficulty==="hard" ? .58 :
+        room.difficulty==="easy" ? .38 : .50;
 
-      if(Math.random()>chance) return json({skipped:"random"});
-      if(last?.participant_id===ai.id && sinceAi<22) return json({skipped:"double"});
+      if(Math.random()>chance){
+        return json({skipped:"random"});
+      }
     }
 
     const ps = await sb(`participants?room_id=eq.${room.id}&select=id,nickname,emoji&order=joined_at.asc`);
@@ -324,14 +369,27 @@ export default async (req) => {
       .map(m=>`${m.emoji||""} ${m.nickname}: ${m.body}`)
       .join("\n");
 
+    // AI가 새 화제를 만들지 않도록 최근 사람 메시지를 맨 아래에 한 번 더 강조.
+    const recentHumanFocus = humanMessages
+      .slice(-4)
+      .map(m=>`${m.emoji||""} ${m.nickname}: ${m.body}`)
+      .join("\n");
+
+    const historyWithHumanFocus =
+      `${history}\n\n[특히 반응해야 할 최근 사람 메시지]\n${recentHumanFocus}`;
+
     const recentAiTexts = aiMessages.slice(-6).map(m=>m.body||"");
     const plan = buildStylePlan(room.difficulty, aiMessages);
 
-    let text = await generateMessage({room, ai, names, history, plan, recentAiTexts});
+    let text = await generateMessage({
+      room, ai, names,
+      history:historyWithHumanFocus,
+      plan, recentAiTexts
+    });
 
     if(styleViolation(text, plan, recentAiTexts)){
       text = await generateMessage({
-        room, ai, names, history, plan, recentAiTexts,
+        room, ai, names, history:historyWithHumanFocus, plan, recentAiTexts,
         retryNote:"방금 문장은 너무 길거나 반복적이거나 말투 제한을 어겼다. 가장 최근 1~3개 메시지 흐름에만 붙어서 더 짧고 평범한 말로 다시 작성하라. 웃음/축약 표현 제한도 지켜라."
       });
     }
