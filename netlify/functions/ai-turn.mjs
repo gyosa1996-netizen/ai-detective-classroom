@@ -298,21 +298,13 @@ export default async (req) => {
     const lastHuman = humanMessages.at(-1);
 
     // ------------------------------------------------------------
-    // v6: AI가 먼저 말해서 정체가 드러나는 문제를 서버에서 강제로 차단
+    // v6.1:
+    // - 자동 발언은 기존 제한을 그대로 적용
+    // - 교사의 "AI 한 번 말하게 하기"(force=true)는 제한을 우회
     // ------------------------------------------------------------
-    // 최소 사람 메시지 3개가 쌓여야 함.
-    if(humanMessages.length < 3){
-      return json({skipped:"need-3-human-messages"});
-    }
 
-    // 서로 다른 실제 참가자 2명 이상이 먼저 대화해야 함.
-    const distinctHumanSpeakers = new Set(
-      humanMessages.map(m=>m.participant_id)
-    );
-    if(distinctHumanSpeakers.size < 2){
-      return json({skipped:"need-2-human-speakers"});
-    }
-
+    // 교사 강제 발언도 아무 대화가 없을 때 혼자 새 화제를 만들지는 않음.
+    // 사람 메시지가 1개라도 있으면 바로 응답 가능.
     if(!lastHuman){
       return json({skipped:"no-human-message"});
     }
@@ -324,24 +316,35 @@ export default async (req) => {
     const sinceHuman =
       (Date.now()-new Date(lastHuman.created_at).getTime())/1000;
 
-    // 사람 메시지가 올라오자마자 즉답하지 않도록 최소 4초 대기.
-    // 자동 호출은 주기적으로 들어오므로 실제 응답 시점은 자연스럽게 흔들린다.
-    if(sinceHuman < 4){
-      return json({skipped:"human-message-too-recent"});
-    }
-
-    // 최근 18초 동안 사람 말이 없으면 AI도 침묵.
-    // AI가 혼자 새 화제를 꺼내는 상황을 방지한다.
-    if(sinceHuman > 18){
-      return json({skipped:"conversation-quiet"});
-    }
-
-    // 직전 메시지가 AI라면 연속 발언을 막는다.
-    if(last?.participant_id===ai.id && sinceAi < 24){
-      return json({skipped:"double"});
-    }
-
     if(!force){
+      // 자동 AI만 적용되는 시작 조건:
+      // 사람 메시지 최소 3개 + 서로 다른 사람 2명 이상
+      if(humanMessages.length < 3){
+        return json({skipped:"need-3-human-messages"});
+      }
+
+      const distinctHumanSpeakers = new Set(
+        humanMessages.map(m=>m.participant_id)
+      );
+      if(distinctHumanSpeakers.size < 2){
+        return json({skipped:"need-2-human-speakers"});
+      }
+
+      // 사람 메시지 직후 너무 빠른 자동 응답 방지
+      if(sinceHuman < 4){
+        return json({skipped:"human-message-too-recent"});
+      }
+
+      // 대화가 멈췄으면 자동 AI도 침묵
+      if(sinceHuman > 18){
+        return json({skipped:"conversation-quiet"});
+      }
+
+      // 자동 AI 연속 발언 방지
+      if(last?.participant_id===ai.id && sinceAi < 24){
+        return json({skipped:"double"});
+      }
+
       const baseGap =
         room.difficulty==="hard" ? 9 :
         room.difficulty==="easy" ? 15 : 11;
@@ -361,6 +364,9 @@ export default async (req) => {
       }
     }
 
+    // force=true이면 여기까지의 자동 제한을 전부 우회하고 즉시 생성 단계로 진행.
+
+
     const ps = await sb(`participants?room_id=eq.${room.id}&select=id,nickname,emoji&order=joined_at.asc`);
 
     const names = (ps||[]).map(p=>`${p.emoji} ${p.nickname}`);
@@ -375,8 +381,12 @@ export default async (req) => {
       .map(m=>`${m.emoji||""} ${m.nickname}: ${m.body}`)
       .join("\n");
 
+    const forceHint = force
+      ? `\n\n[교사 강제 응답]\n교사가 지금 답변을 요청했다. 가장 최근 사람 메시지에 바로 자연스럽게 반응하라. 새 화제를 만들지 마라.`
+      : "";
+
     const historyWithHumanFocus =
-      `${history}\n\n[특히 반응해야 할 최근 사람 메시지]\n${recentHumanFocus}`;
+      `${history}\n\n[특히 반응해야 할 최근 사람 메시지]\n${recentHumanFocus}${forceHint}`;
 
     const recentAiTexts = aiMessages.slice(-6).map(m=>m.body||"");
     const plan = buildStylePlan(room.difficulty, aiMessages);
