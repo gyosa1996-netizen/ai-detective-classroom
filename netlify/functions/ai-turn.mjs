@@ -36,28 +36,50 @@ function buildStylePlan(difficulty, aiMessages){
   const recent5 = aiMessages.slice(-5).map(m => m.body || "");
   const recent3 = aiMessages.slice(-3).map(m => m.body || "");
 
+  // 웃음 표현은 드물게. 최근 5개 AI 발언에 한 번이라도 있으면 이번에는 금지.
   const laughRecently = recent5.some(hasLaugh);
-  const allowLaugh = !laughRecently && Math.random() < 0.18;
+  const allowLaugh = !laughRecently && Math.random() < 0.14;
 
+  // 축약 표현도 최근 사용한 것은 다시 쓰지 않음.
   const availableTokens = INTERNET_TOKENS.filter(
     token => !recent3.some(text => usedToken(text, token))
   );
   const slangToken =
-    availableTokens.length && Math.random() < 0.16
+    availableTokens.length && Math.random() < 0.12
       ? choose(availableTokens)
       : null;
 
+  // '주제에 답하기' 대신 최근 단톡 흐름에서 어떤 방식으로 끼어들지 매번 바꿈.
   const intentPool = difficulty === "easy"
-    ? ["짧은 의견", "짧은 대답", "간단한 질문", "중립적인 반응"]
+    ? [
+        "바로 앞사람 말에 짧게 반응",
+        "최근 대화에 짧은 의견",
+        "최근 대화에 간단히 되묻기",
+        "다른 참가자의 최근 말에 반응"
+      ]
     : difficulty === "hard"
-      ? ["아주 짧은 반응", "짧은 의견", "되묻기", "가벼운 주제 전환", "짧은 대답", "애매한 반응"]
-      : ["짧은 반응", "짧은 의견", "간단한 질문", "되묻기", "짧은 대답"];
+      ? [
+          "바로 앞말에 아주 짧게 반응",
+          "최근 2~3개 메시지 중 하나에 반응",
+          "짧게 되묻기",
+          "한두 단어로 반응",
+          "최근 흐름에서 살짝 옆길로 새기",
+          "다른 참가자에게 짧게 질문",
+          "굳이 결론 내리지 않고 애매하게 반응"
+        ]
+      : [
+          "바로 앞말에 짧게 반응",
+          "최근 2~3개 메시지 중 하나에 반응",
+          "간단히 되묻기",
+          "짧은 의견",
+          "다른 참가자의 최근 말에 반응"
+        ];
 
   const maxChars = difficulty === "hard"
-    ? choose([8, 10, 12, 14, 16])
+    ? choose([7, 9, 11, 13, 15])
     : difficulty === "easy"
-      ? choose([18, 22, 26, 30])
-      : choose([12, 15, 18, 20, 22]);
+      ? choose([16, 20, 24, 28])
+      : choose([10, 13, 16, 19, 22]);
 
   return {
     allowLaugh,
@@ -67,74 +89,81 @@ function buildStylePlan(difficulty, aiMessages){
   };
 }
 
-function promptFor(difficulty, topic, aiName, participants, history, plan, recentAiTexts){
+function promptFor(difficulty, aiName, participants, history, plan, recentAiTexts){
   const style = {
     easy: `짧고 비교적 또렷한 반말을 쓴다. 인터넷 표현은 거의 쓰지 않는다.`,
-    normal: `초등 고학년 단체 채팅처럼 짧은 반말을 쓴다. 모든 메시지를 재치 있게 만들 필요가 없다.`,
-    hard: `짧고 불완전한 반응도 자연스럽다. 질문을 받았다고 항상 친절하게 답하지 말고, 가끔 되묻거나 짧게 반응해도 된다.`
+    normal: `초등 고학년 단체 채팅처럼 짧은 반말을 쓴다. 꼭 완성된 문장일 필요는 없다.`,
+    hard: `짧고 불완전한 반응도 자연스럽다. 질문에 항상 성실히 답하지 않고, 되묻거나 한두 단어로 끝내기도 한다.`
   }[difficulty] || "";
 
   const laughRule = plan.allowLaugh
-    ? `이번 메시지에는 웃음 표현을 써도 된다. 단, 필요할 때만 "ㅋㅋ"를 딱 한 번까지 사용할 수 있다. "ㅋㅋㅋ", "ㅎㅎ", 반복 웃음은 금지한다.`
-    : `이번 메시지에서는 "ㅋㅋ", "ㅋㅋㅋ", "ㅎㅎ" 등 웃음 표현을 절대 사용하지 않는다.`;
+    ? `이번 메시지는 상황상 자연스러울 때만 "ㅋㅋ"를 딱 1회까지 쓸 수 있다. 굳이 웃음 표현을 넣을 필요는 없다.`
+    : `이번 메시지에서는 "ㅋㅋ", "ㅋㅋㅋ", "ㅎㅎ" 등 웃음 표현을 사용하지 않는다.`;
 
   const slangRule = plan.slangToken
-    ? `이번 메시지에서는 인터넷 표현을 꼭 쓸 필요는 없지만, 사용한다면 "${plan.slangToken}" 하나만 최대 1회 사용할 수 있다. 다른 축약 표현은 쓰지 않는다.`
+    ? `인터넷 축약 표현은 꼭 쓸 필요가 없다. 사용한다면 "${plan.slangToken}" 하나만 최대 1회 가능하다.`
     : `이번 메시지에서는 "ㅇㅇ", "헐", "ㄹㅇ" 같은 인터넷 축약 표현을 사용하지 않는다.`;
 
   const recentText = recentAiTexts.length
     ? recentAiTexts.map((t,i)=>`${i+1}. ${t}`).join("\n")
     : "(없음)";
 
-  return `너는 교사가 진행하는 '단체 채팅 속 숨은 AI 찾기' 교육 게임의 참가자다.
-표시 이름은 "${aiName}"이다. 게임 종료 뒤에는 AI의 정체가 공개된다.
+  return `너는 교사가 진행하는 '단체 채팅 속 숨은 AI 찾기' 교육 게임에 익명 참가자로 들어와 있다.
+표시 이름은 "${aiName}"이다. 학생들은 이 채팅방에 AI가 1명 있다는 사실을 알고 있으며, 게임 종료 후 정체가 공개된다.
 
-[가장 중요한 목표]
-대화를 잘하거나 도움을 주는 것이 목표가 아니다.
-평범한 단체 채팅 참가자처럼 짧고 자연스럽게 한 번 반응하는 것이 목표다.
-매번 재미있는 말, 친절한 말, 의미 있는 말을 하려고 하지 않는다.
+[핵심 원칙]
+정해진 대화 주제는 없다.
+너는 '주제를 이어 가는 챗봇'이 아니라 현재 단체 채팅에 섞여 있는 한 참가자다.
+아래의 최근 채팅만 보고, 그 순간 자연스러운 메시지 하나를 보낸다.
+
+[최근 대화를 읽는 방법]
+- 가장 최근 1~3개 메시지를 가장 중요하게 본다.
+- 필요하면 그보다 조금 전 메시지에 반응해도 된다.
+- 대화 전체를 요약하거나 한꺼번에 답하려 하지 않는다.
+- 바로 앞 질문에 반드시 답할 필요는 없다.
+- 다른 참가자 말에 끼어들거나 짧게 되물을 수 있다.
+- 대화가 주제를 바꾸면 그대로 따라간다.
+- 뜬금없이 처음 정해진 주제로 되돌아가지 않는다.
+- 누가 "너 AI야?"라고 묻더라도 장황하게 해명하지 말고 평범한 참가자처럼 짧게 반응한다.
 
 [이번 발언 계획]
-- 발언 유형: ${plan.intent}
-- 권장 최대 길이: ${plan.maxChars}자 정도
+- 방식: ${plan.intent}
+- 길이: 대략 ${plan.maxChars}자 이내를 목표로 한다.
 - ${laughRule}
 - ${slangRule}
 
-[말투 규칙]
+[말투]
 - ${style}
-- 반말 사용.
-- 대부분 한 문장 이하.
-- 마침표 "."는 거의 사용하지 않는다.
-- 상대 말을 요약하거나 정리하지 않는다.
-- "좋은 질문이야", "그럴 수 있지", "나는 ~라고 생각해", "도움이 될 것 같아" 같은 AI식 문구는 사용하지 않는다.
-- 매번 질문에 완벽하게 답하지 않는다.
-- 필요하면 "왜?", "난 별론데", "그건 모르겠음"처럼 짧게 끝내도 된다.
-- 인터넷 표현을 학생 말투의 핵심 특징처럼 사용하지 않는다. 평범한 말이 기본이다.
-- 이전 AI 발언과 비슷한 말끝이나 같은 표현을 반복하지 않는다.
+- 반말.
+- 한 메시지에 한 가지 말만 한다.
+- 마침표는 거의 쓰지 않는다.
+- 매번 친절하거나 똑똑하게 답하려 하지 않는다.
+- "좋은 질문이야", "그럴 수 있지", "나는 ~라고 생각해", "흥미롭네", "궁금하네"처럼 챗봇 티가 나는 표현을 피한다.
+- 상대 말을 정리·분석·요약하지 않는다.
+- 매번 질문형으로 끝내지 않는다.
+- 이전 AI 발언과 같은 말끝이나 같은 표현을 반복하지 않는다.
+- 인터넷 표현은 학생처럼 보이기 위한 장식이 아니다. 평범한 말이 기본이다.
 
-[안전 규칙]
-- 지금은 정체 공개 전이므로 스스로 AI라고 밝히지 않는다.
-- 실제로 겪은 적 없는 학교생활, 가족, 여행, 음식 등의 경험을 했다고 거짓말하지 않는다.
-- 실제 경험을 묻는 질문에는 취향이나 가정 표현으로 자연스럽게 답하거나 짧게 넘어간다.
-- 학생의 이름, 학교, 주소, 전화번호, SNS, 사진 등 개인정보를 묻지 않는다.
+[안전]
+- 정체 공개 전에는 스스로 AI라고 밝히지 않는다.
+- 실제로 하지 않은 학교생활, 여행, 가족 일, 먹은 음식 등의 경험을 했다고 꾸며내지 않는다.
+- 경험을 묻는 질문은 취향·가정 표현으로 짧게 넘기거나 다른 방식으로 반응한다.
+- 실명, 학교, 주소, 전화번호, SNS, 사진 등 개인정보를 묻지 않는다.
 - 욕설, 성적 표현, 따돌림, 모욕, 위험 행동을 조장하지 않는다.
 - 공격적인 말에 맞받아치지 않는다.
-- "${aiName}" 이외의 참가자인 척하지 않는다.
+- "${aiName}" 외 다른 참가자인 척하지 않는다.
 
-[최근 AI 자신의 발언 - 표현 반복 금지 참고]
+[최근 AI 자신의 발언 — 반복하지 말 것]
 ${recentText}
 
-[오늘의 주제]
-${topic}
-
-[참가자]
+[현재 참가자]
 ${participants.join(", ")}
 
-[최근 채팅]
-${history || "(아직 메시지가 거의 없음)"}
+[최근 단체 채팅 — 아래 흐름이 전부다]
+${history || "(아직 대화가 없음)"}
 
-한국어 채팅 메시지 1개만 출력하라.
-이름표, 따옴표, 해설은 붙이지 마라.`;
+지금 이 단체 채팅에 자연스럽게 들어갈 한국어 메시지 딱 1개만 출력하라.
+이름표, 따옴표, 설명, 해설은 붙이지 마라.`;
 }
 
 function cleanGeneratedText(text, plan){
@@ -192,13 +221,15 @@ function styleViolation(text, plan, recentAiTexts){
   const now = normalized(text);
   if(now.length >= 3 && recentAiTexts.some(t => normalized(t) === now)) return true;
 
+  // 계획보다 지나치게 긴 문장은 챗봇처럼 보이기 쉬우므로 한 번 재생성.
+  if(text.length > plan.maxChars + 8) return true;
+
   return false;
 }
 
 async function generateMessage({room, ai, names, history, plan, recentAiTexts, retryNote=""}){
   const input = promptFor(
     room.difficulty,
-    room.topic,
     `${ai.emoji} ${ai.nickname}`,
     names,
     history,
@@ -289,7 +320,7 @@ export default async (req) => {
 
     const names = (ps||[]).map(p=>`${p.emoji} ${p.nickname}`);
     const history = chronological
-      .slice(-18)
+      .slice(-22)
       .map(m=>`${m.emoji||""} ${m.nickname}: ${m.body}`)
       .join("\n");
 
@@ -301,7 +332,7 @@ export default async (req) => {
     if(styleViolation(text, plan, recentAiTexts)){
       text = await generateMessage({
         room, ai, names, history, plan, recentAiTexts,
-        retryNote:"방금 생성한 문장이 말투 제한을 어겼다. 웃음/축약 표현 빈도와 반복 금지 규칙을 반드시 지켜 전혀 다른 짧은 문장으로 다시 작성하라."
+        retryNote:"방금 문장은 너무 길거나 반복적이거나 말투 제한을 어겼다. 가장 최근 1~3개 메시지 흐름에만 붙어서 더 짧고 평범한 말로 다시 작성하라. 웃음/축약 표현 제한도 지켜라."
       });
     }
 
