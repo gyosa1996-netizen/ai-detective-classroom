@@ -113,7 +113,7 @@ async function createRoom(){
     $("#createRoomBtn").disabled=true;
     const hostKey=randomKey();
     const rows=await rpc("create_room",{
-      p_topic:$("#topicInput").value.trim() || "요즘 내가 가장 재미있게 하는 것은?",
+      p_topic:"자유대화",
       p_duration_sec:Number(selectedSegment("#durationGroup")||300),
       p_difficulty:selectedSegment("#difficultyGroup")||"normal",
       p_host_key:hostKey
@@ -124,7 +124,6 @@ async function createRoom(){
     const teacherUrl=new URL(location.href); teacherUrl.search=""; teacherUrl.searchParams.set("host",room.code);
     history.replaceState({}, "", teacherUrl);
     $("#teacherRoomCode").textContent=room.code;
-    $("#teacherTopic").textContent=room.topic;
     showView("#teacherRoomView");
     drawQr();
     await teacherTick();
@@ -249,7 +248,6 @@ function hideAllTeacherPanels(){
   ["#teacherLobbyPanel","#teacherChatPanel","#teacherVotePanel","#teacherRevealPanel"].forEach(x=>$(x).classList.add("hidden"));
 }
 function renderTeacherState(room){
-  $("#teacherTopic").textContent=room.topic;
   $("#teacherTimer").textContent=fmtTime(secondsLeft(room));
   hideAllTeacherPanels();
   if(room.status==="lobby"){
@@ -274,8 +272,6 @@ function hideAllStudentPanels(){
 }
 function renderStudentState(room,participants){
   $("#studentTimer").textContent=fmtTime(secondsLeft(room));
-  $("#studentTopicLobby").textContent=room.topic;
-  $("#studentTopic").textContent=room.topic;
   hideAllStudentPanels();
   if(room.status==="lobby"){
     $("#studentLobbyPanel").classList.remove("hidden");
