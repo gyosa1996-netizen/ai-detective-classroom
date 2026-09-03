@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>우리 반에 AI가 숨어있다</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <header class="topbar">
+    <button id="homeBtn" class="brand" type="button" aria-label="처음 화면으로">
+      <span class="brand-mark">AI?</span>
+      <span>우리 반에 AI가 숨어있다</span>
+    </button>
+    <span class="top-note">수업용 익명 튜링 테스트</span>
+  </header>
+
+  <main class="shell">
+    <section id="homeView" class="view">
+      <div class="hero">
+        <p class="eyebrow">HUMAN OR AI?</p>
+        <h1>단체 채팅 속<br><span>숨은 AI</span>를 찾아라</h1>
+        <p class="hero-copy">학생들은 익명 닉네임으로 대화합니다. 그중 한 명은 사람이 아니라 AI입니다.</p>
+      </div>
+
+      <div class="choice-grid">
+        <button id="showTeacherBtn" class="choice-card teacher" type="button">
+          <span class="choice-icon">👩‍🏫</span>
+          <strong>교사용</strong>
+          <span>방 만들기 · 진행 · 정답 공개</span>
+        </button>
+        <button id="showStudentBtn" class="choice-card student" type="button">
+          <span class="choice-icon">🕵️</span>
+          <strong>학생용</strong>
+          <span>방 코드로 입장하기</span>
+        </button>
+      </div>
+
+      <div class="rule-strip">
+        <span>실명 입력 금지</span>
+        <span>개인정보 질문 금지</span>
+        <span>AI 공개 전 추리하기</span>
+      </div>
+    </section>
+
+    <section id="teacherCreateView" class="view hidden">
+      <div class="panel narrow">
+        <button class="back-link" data-back="home" type="button">← 처음으로</button>
+        <p class="eyebrow">TEACHER</p>
+        <h2>게임 방 만들기</h2>
+
+        <label class="field">
+          <span>오늘의 채팅 주제</span>
+          <input id="topicInput" maxlength="80" value="요즘 내가 가장 재미있게 하는 것은?" />
+        </label>
+
+        <div class="field">
+          <span>채팅 시간</span>
+          <div class="segmented" id="durationGroup">
+            <button type="button" data-value="180">3분</button>
+            <button type="button" data-value="300" class="active">5분</button>
+            <button type="button" data-value="420">7분</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span>AI 숨기기 난이도</span>
+          <div class="segmented" id="difficultyGroup">
+            <button type="button" data-value="easy">쉬움</button>
+            <button type="button" data-value="normal" class="active">보통</button>
+            <button type="button" data-value="hard">어려움</button>
+          </div>
+          <small>어려울수록 AI가 더 짧고 자연스러운 학생 말투를 사용합니다.</small>
+        </div>
+
+        <button id="createRoomBtn" class="primary big" type="button">방 만들기</button>
+      </div>
+    </section>
+
+    <section id="studentJoinView" class="view hidden">
+      <div class="panel narrow">
+        <button class="back-link" data-back="home" type="button">← 처음으로</button>
+        <p class="eyebrow">STUDENT</p>
+        <h2>방 코드 입력</h2>
+        <p class="muted">선생님 화면의 숫자 4자리를 입력하세요.</p>
+        <input id="roomCodeInput" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000" autocomplete="off" />
+        <button id="joinRoomBtn" class="primary big" type="button">입장하기</button>
+        <div class="privacy-note">
+          <strong>약속</strong>
+          <p>실명, 전화번호, 주소, SNS 아이디 등 개인정보는 채팅에 적지 않습니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="teacherRoomView" class="view hidden">
+      <div class="teacher-layout">
+        <aside class="teacher-side">
+          <div class="room-code-card">
+            <span>방 코드</span>
+            <strong id="teacherRoomCode">----</strong>
+            <button id="copyJoinLinkBtn" class="ghost" type="button">입장 링크 복사</button>
+          </div>
+          <div id="qrBox" class="qr-box"></div>
+          <div class="side-block">
+            <span class="label">채팅 주제</span>
+            <p id="teacherTopic"></p>
+          </div>
+          <div class="side-block">
+            <span class="label">참가자 <b id="participantCount">0</b>명</span>
+            <div id="teacherParticipants" class="participant-list"></div>
+          </div>
+        </aside>
+
+        <div class="teacher-main">
+          <div class="game-head">
+            <div>
+              <p class="eyebrow">TEACHER CONTROL</p>
+              <h2 id="teacherStatusTitle">학생 입장을 기다리는 중</h2>
+            </div>
+            <div id="teacherTimer" class="timer">05:00</div>
+          </div>
+
+          <div id="teacherLobbyPanel" class="stage-card">
+            <h3>준비가 되면 시작하세요.</h3>
+            <p>게임을 시작하는 순간 AI 참가자 1명이 몰래 추가됩니다.</p>
+            <button id="startGameBtn" class="primary big" type="button">게임 시작</button>
+          </div>
+
+          <div id="teacherChatPanel" class="hidden">
+            <div id="teacherMessages" class="messages projector"></div>
+            <div class="teacher-controls">
+              <button id="forceAiBtn" class="secondary" type="button">AI 한 번 말하게 하기</button>
+              <button id="beginVoteBtn" class="danger" type="button">채팅 종료 · 투표 시작</button>
+            </div>
+          </div>
+
+          <div id="teacherVotePanel" class="stage-card hidden">
+            <h3>AI라고 생각하는 참가자에게 투표 중</h3>
+            <p><strong id="voteProgress">0 / 0</strong>명이 투표했습니다.</p>
+            <div id="teacherVoteBars" class="vote-bars"></div>
+            <button id="revealBtn" class="primary big" type="button">AI 정체 공개</button>
+          </div>
+
+          <div id="teacherRevealPanel" class="reveal-card hidden">
+            <p>AI의 정체는…</p>
+            <div id="teacherAiReveal" class="ai-reveal"></div>
+            <div id="teacherFinalBars" class="vote-bars"></div>
+            <button id="newRoomBtn" class="secondary big" type="button">새 방 만들기</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="studentGameView" class="view hidden">
+      <div class="student-wrap">
+        <div class="student-head">
+          <div>
+            <span class="mini-label">내 닉네임</span>
+            <strong id="myNickname">-</strong>
+          </div>
+          <div>
+            <span class="mini-label">방 코드</span>
+            <strong id="studentRoomCode">----</strong>
+          </div>
+          <div id="studentTimer" class="timer small">05:00</div>
+        </div>
+
+        <div id="studentLobbyPanel" class="stage-card">
+          <p class="eyebrow">LOBBY</p>
+          <h2>다른 친구들을 기다리는 중</h2>
+          <p id="studentTopicLobby" class="topic-big"></p>
+          <div id="studentParticipantsLobby" class="chip-list"></div>
+          <p class="muted">시작하면 참가자 중 한 명은 AI입니다.</p>
+        </div>
+
+        <div id="studentChatPanel" class="chat-card hidden">
+          <div class="chat-topic"><span>오늘의 주제</span><strong id="studentTopic"></strong></div>
+          <div id="studentMessages" class="messages"></div>
+          <form id="messageForm" class="message-form">
+            <input id="messageInput" maxlength="120" autocomplete="off" placeholder="짧게 메시지를 입력하세요" />
+            <button type="submit">전송</button>
+          </form>
+        </div>
+
+        <div id="studentVotePanel" class="stage-card hidden">
+          <p class="eyebrow">VOTE</p>
+          <h2>누가 AI였을까요?</h2>
+          <p>가장 AI 같았던 참가자 한 명을 선택하세요.</p>
+          <div id="studentVoteChoices" class="vote-choices"></div>
+          <button id="submitVoteBtn" class="primary big" type="button">투표하기</button>
+          <p id="votedMessage" class="success hidden">투표 완료. 선생님의 공개를 기다리세요.</p>
+        </div>
+
+        <div id="studentRevealPanel" class="reveal-card hidden">
+          <p>AI의 정체는…</p>
+          <div id="studentAiReveal" class="ai-reveal"></div>
+          <div id="studentFinalBars" class="vote-bars"></div>
+          <div class="reflection">
+            <strong>생각해 보기</strong>
+            <p>나는 무엇을 근거로 이 참가자를 사람 또는 AI라고 판단했을까?</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="errorView" class="view hidden">
+      <div class="panel narrow">
+        <h2>연결 설정이 필요합니다.</h2>
+        <p id="errorText" class="muted"></p>
+        <button class="secondary big" data-back="home" type="button">처음으로</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
